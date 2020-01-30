@@ -2,21 +2,22 @@
 
 namespace Emartech\Emarsys\Events;
 
-use Magento\Sales\Model\Order;
-use Magento\Sales\Model\Order\Email\SenderBuilder;
 use Emartech\Emarsys\Api\Data\ConfigInterface;
 use Emartech\Emarsys\Helper\ConfigReader;
+use Emartech\Emarsys\Helper\Customer as CustomerHelper;
+use Emartech\Emarsys\Helper\Json;
+use Emartech\Emarsys\Model\Event as EventModel;
 use Emartech\Emarsys\Model\EventFactory as EmarsysEventFactory;
 use Emartech\Emarsys\Model\EventRepository;
-use Emartech\Emarsys\Helper\Json;
-use Emartech\Emarsys\Helper\Customer as CustomerHelper;
-use Psr\Log\LoggerInterface;
-use Magento\Sales\Model\Order\Email\Container\Template as TemplateContainer;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
-use Magento\Sales\Model\Order\Invoice;
+use Magento\Sales\Model\Order;
 use Magento\Sales\Model\Order\Creditmemo;
-use Emartech\Emarsys\Model\Event as EventModel;
+use Magento\Sales\Model\Order\Email\Container\OrderIdentity;
+use Magento\Sales\Model\Order\Email\Container\Template as TemplateContainer;
+use Magento\Sales\Model\Order\Email\SenderBuilder;
+use Magento\Sales\Model\Order\Invoice;
+use Psr\Log\LoggerInterface;
 
 class SenderBuilderPlugin
 {
@@ -52,12 +53,12 @@ class SenderBuilderPlugin
     /**
      * SenderBuilderPlugin constructor.
      *
-     * @param ConfigReader $configReader
+     * @param ConfigReader        $configReader
      * @param EmarsysEventFactory $eventFactory
-     * @param EventRepository $eventRepository
-     * @param Json $json
-     * @param CustomerHelper $customerHelper
-     * @param LoggerInterface $logger
+     * @param EventRepository     $eventRepository
+     * @param Json                $json
+     * @param CustomerHelper      $customerHelper
+     * @param LoggerInterface     $logger
      */
     public function __construct(
         ConfigReader $configReader,
@@ -81,26 +82,32 @@ class SenderBuilderPlugin
      *
      * @return mixed
      */
-    public function aroundSend(
-        SenderBuilder $senderBuilder,
-        callable $proceed
-    ) {
+    public function aroundSend(SenderBuilder $senderBuilder, callable $proceed)
+    {
         //----
         //sales_email/general/async_sending - should be disabled
         //----
         try {
             // @codingStandardsIgnoreLine
             $reflection = new \ReflectionClass('\Magento\Sales\Model\Order\Email\SenderBuilder');
-            /** @var \Magento\Sales\Model\Order\Email\Container\OrderIdentity $identityContainer */
+            /** @var OrderIdentity $identityContainer */
             $identityContainer = $reflection->getProperty('identityContainer');
             $identityContainer->setAccessible(true);
             $identityContainer = $identityContainer->getValue($senderBuilder);
             $storeId = $identityContainer->getStore()->getStoreId();
             $this->websiteId = $identityContainer->getStore()->getWebsiteId();
 
-            if (!$this->configReader->isEnabledForStore(ConfigInterface::MARKETING_EVENTS, $storeId)) {
+            if (!$this->configReader->isEnabledForStore(
+                ConfigInterface::MARKETING_EVENTS,
+                $storeId
+            )) {
                 return $proceed();
             }
+
+            $sendMagentoEmail = $this->configReader->isEnabledForStore(
+                ConfigInterface::MAGENTO_SEND_EMAIL,
+                $storeId
+            );
 
             /** @var TemplateContainer $templateContainer */
             $templateContainer = $reflection->getProperty('templateContainer');
@@ -121,6 +128,11 @@ class SenderBuilderPlugin
             );
         } catch (\Exception $e) {
             $this->logger->warning('Emartech\\Emarsys\\Events\\SenderBuilderPlugin: ' . $e->getMessage());
+            $sendMagentoEmail = true;
+        }
+
+        if ($sendMagentoEmail) {
+            return $proceed();
         }
     }
 
@@ -178,7 +190,11 @@ class SenderBuilderPlugin
         $data['is_guest'] = $order->getCustomerIsGuest();
         if ($order->getCustomerId()) {
             $data['customer'] = false;
-            $customerData = $this->customerHelper->getOneCustomer($order->getCustomerId(), $this->websiteId, true);
+            $customerData = $this->customerHelper->getOneCustomer(
+                $order->getCustomerId(),
+                $this->websiteId,
+                true
+            );
             if (false !== $customerData) {
                 $data['customer'] = $customerData;
             }

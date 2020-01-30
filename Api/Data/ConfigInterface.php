@@ -14,9 +14,10 @@ interface ConfigInterface
     const MERCHANT_ID               = 'merchant_id';
     const SNIPPET_URL               = 'web_tracking_snippet_url';
     const STORE_SETTINGS            = 'store_settings';
+    const MAGENTO_SEND_EMAIL        = 'magento_send_email';
 
-    const SCOPE_TYPE_DEFAULT       = 'websites';
-    const XML_PATH_EMARSYS_PRE_TAG = 'emartech/emarsys/config/';
+    const SCOPE_TYPE_DEFAULT        = 'websites';
+    const XML_PATH_EMARSYS_PRE_TAG  = 'emartech/emarsys/config/';
 
     const ATTRIBUTE_CONFIG_POST_TAG = '_attributes';
 
@@ -108,7 +109,12 @@ interface ConfigInterface
      *
      * @return bool
      */
-    public function setConfigValue($xmlPostPath, $value, $scopeId, $scope = self::SCOPE_TYPE_DEFAULT);
+    public function setConfigValue(
+        $xmlPostPath,
+        $value,
+        $scopeId,
+        $scope = self::SCOPE_TYPE_DEFAULT
+    );
 
     /**
      * @return void
